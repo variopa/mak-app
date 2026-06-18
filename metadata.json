@@ -1,0 +1,6 @@
+{
+  "name": "Mak Stock Manager",
+  "description": "A neumorphic, offline-first restaurant inventory stock management system with Room persistence and synchronization indicators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
