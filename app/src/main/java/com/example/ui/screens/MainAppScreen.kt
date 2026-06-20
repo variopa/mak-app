@@ -140,6 +140,8 @@ fun MainAppScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 if (selectedTab == ActiveTab.DASHBOARD) {
                     HeaderBanner(
+                        categories = categories,
+                        items = items,
                         totalStockUnits = totalStockUnits,
                         uniqueSkus = items.size,
                         lowStockCount = lowStockCount,
@@ -394,11 +396,12 @@ fun SecurityEntranceScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             Text(
-                text = "NEOSTOCK SECURE",
-                fontSize = 18.sp,
+                text = "MAK CAFE & RESTAURANT STOCK MANAGER",
+                fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.8.sp,
-                color = MaterialTheme.colorScheme.onBackground
+                letterSpacing = 1.2.sp,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -582,6 +585,8 @@ fun SecurityEntranceScreen(
 
 @Composable
 fun HeaderBanner(
+    categories: List<Category>,
+    items: List<Item>,
     totalStockUnits: Float,
     uniqueSkus: Int,
     lowStockCount: Int,
@@ -688,26 +693,36 @@ fun HeaderBanner(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
                         Text(
-                            text = t("Total Active Items", "አጠቃላይ ዕቃዎች"),
+                            text = t("Quick Stock Audit Lookup", "ስቶክ ፈጣን ማጠቃለያ"),
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "${String.format(Locale.US, "%,.2f", totalStockUnits)} " + t("Items", "ዕቃዎች"),
-                            color = Color.White,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "$uniqueSkus " + t("types listed", "የተመዘገቡ ዓይነቶች"),
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 10.sp
-                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val activeItems = items.filter { it.currentStock > 0 }
+                        if (activeItems.isEmpty()) {
+                            Text(
+                                text = t("No items currently stocked.", "ምንም የተመዘገበ ዕቃ የለም።"),
+                                color = Color.White.copy(alpha = 0.95f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            val summary = activeItems.joinToString(", ") { item ->
+                                val qtyStr = if (item.currentStock % 1 == 0f) item.currentStock.toInt().toString() else String.format(Locale.US, "%.1f", item.currentStock)
+                                "$qtyStr ${item.unit} of ${item.name}"
+                            }
+                            Text(
+                                text = summary,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     Button(
@@ -834,7 +849,7 @@ fun BottomNavBar(
                     Triple(t("INSERT", "ማስገባት"), Icons.Rounded.AddCircle, ActiveTab.INSERT),
                     Triple(t("TAKEOUT", "ማውጣት"), Icons.Rounded.RemoveCircle, ActiveTab.TAKEOUT),
                     Triple(t("HISTORY", "ታሪክ"), Icons.Rounded.History, ActiveTab.HISTORY),
-                    Triple(t("REPORT", "ሪፖርት"), Icons.Rounded.Assessment, ActiveTab.REPORT)
+                    Triple(t("SETTINGS", "ቅንብሮች"), Icons.Rounded.Settings, ActiveTab.REPORT)
                 )
 
                 for (item in menuItems) {
@@ -1965,6 +1980,7 @@ fun ReportTab(
     onDeleteAllClick: () -> Unit
 ) {
     val t = { en: String, am: String -> if (isAmharic) am else en }
+    val isAutoSyncEnabled by viewModel.isAutoSyncEnabled.collectAsStateWithLifecycle()
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -2185,6 +2201,55 @@ fun ReportTab(
                             checked = darkModeState.value,
                             onCheckedChange = { darkModeState.value = it }
                         )
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+
+                    // Auto sync toggler row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Rounded.Sync, "autosync", tint = OrangePrimary, modifier = Modifier.size(16.dp))
+                            Text(text = t("Automatic Cloud Sync", "በራስ-ሰር ደመና ማመሳሰል"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Switch(
+                            checked = isAutoSyncEnabled,
+                            onCheckedChange = { viewModel.setAutoSyncEnabled(it) }
+                        )
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+
+                    // Manual cloud sync action row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
+                            Text(text = t("Manual Database Sync", "ደመናን በእጅ ማመሳሰል"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = t("Perform full bidirectional sync now", "አሁኑኑ የውሂብ ማመሳሰልን አስገድድ"), fontSize = 9.sp, color = Color.Gray)
+                        }
+
+                        Button(
+                            onClick = { viewModel.triggerSync() },
+                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+                            if (isSyncing) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                            } else {
+                                Icon(Icons.Rounded.CloudUpload, contentDescription = "Sync", modifier = Modifier.size(12.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(t("SYNC NOW", "ማመሳሰል"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
                     }
 
                     Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
@@ -3698,7 +3763,7 @@ fun CompactHeaderBar(
                         ActiveTab.INSERT -> t("RESTOCK ITEMS", "ዕቃዎች ማስገቢያ")
                         ActiveTab.TAKEOUT -> t("RELEASE STOCK", "ዕቃዎች ማውጫ")
                         ActiveTab.HISTORY -> t("AUDIT TRAILS", "የእንቅስቃሴ ታሪክ")
-                        ActiveTab.REPORT -> t("ANALYTICS & SETTINGS", "ዶክመንት እና ቅንብሮች")
+                        ActiveTab.REPORT -> t("SYSTEM SETTINGS", "የስርዓት ቅንብሮች")
                         else -> "MAK"
                     },
                     color = Color.White,

@@ -158,5 +158,111 @@ object SupabaseSyncEngine {
         }
     }
 
+    private fun fetchTable(tableName: String): JSONArray? {
+        val url = "$BASE_URL/rest/v1/$tableName"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", API_KEY)
+            .addHeader("Authorization", "Bearer $API_KEY")
+            .get()
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    JSONArray(bodyStr)
+                } else {
+                    Log.e(TAG, "Failed to fetch table $tableName: $bodyStr")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Network issue fetching $tableName", e)
+            null
+        }
+    }
+
+    suspend fun syncFullBidirectional(
+        dao: InventoryDao,
+        localCategories: List<Category>,
+        localItems: List<Item>,
+        localTransactions: List<StockTransaction>
+    ): Result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            // First push local changes (sync up)
+            val pushResult = syncLocalToRemote(localCategories, localItems, localTransactions)
+            if (!pushResult.isSuccess) {
+                Log.w(TAG, "Sync Push warning: ${pushResult.message}")
+            }
+
+            // Pull categories from Supabase
+            val categoriesJson = fetchTable("categories")
+            if (categoriesJson != null) {
+                for (i in 0 until categoriesJson.length()) {
+                    val obj = categoriesJson.getJSONObject(i)
+                    val cat = Category(
+                        id = obj.getString("id"),
+                        name = obj.getString("name"),
+                        imageUrl = obj.optString("image_url", "restaurant"),
+                        prefix = obj.optString("prefix", "GEN")
+                    )
+                    dao.insertCategory(cat)
+                }
+            }
+
+            // Pull items from Supabase
+            val itemsJson = fetchTable("items")
+            val remoteItemIds = mutableSetOf<String>()
+            if (itemsJson != null) {
+                for (i in 0 until itemsJson.length()) {
+                    val obj = itemsJson.getJSONObject(i)
+                    val customId = obj.getString("custom_id")
+                    remoteItemIds.add(customId)
+                    val item = Item(
+                        customId = customId,
+                        categoryId = obj.getString("category_id"),
+                        name = obj.getString("name"),
+                        unit = obj.getString("unit"),
+                        currentStock = obj.optDouble("current_stock", 0.0).toFloat(),
+                        parLevel = obj.optDouble("par_level", 0.0).toFloat(),
+                        costPrice = obj.optDouble("cost_price", 0.0).toFloat()
+                    )
+                    dao.insertItem(item)
+                }
+
+                // If items do not exist in supabase, automatically delete them locally
+                val localItems = dao.getAllItemsList()
+                for (localItem in localItems) {
+                    if (!remoteItemIds.contains(localItem.customId)) {
+                        Log.i(TAG, "Deleting orphaned local item: ${localItem.customId}")
+                        dao.deleteItem(localItem.customId)
+                    }
+                }
+            }
+
+            // Pull transactions from Supabase
+            val txsJson = fetchTable("transactions")
+            if (txsJson != null) {
+                for (i in 0 until txsJson.length()) {
+                    val obj = txsJson.getJSONObject(i)
+                    val tx = StockTransaction(
+                        id = obj.getString("id"),
+                        itemId = obj.getString("item_id"),
+                        type = obj.getString("type"),
+                        quantity = obj.optDouble("quantity", 0.0).toFloat(),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        synced = true
+                    )
+                    dao.insertTransaction(tx)
+                }
+            }
+
+            Result(true, "Database live-synced in both directions successfully!")
+        } catch (e: Exception) {
+            Log.e(TAG, "Full bidirectional sync failed", e)
+            Result(false, "Sync failed: ${e.message}")
+        }
+    }
+
     data class Result(val isSuccess: Boolean, val message: String)
 }

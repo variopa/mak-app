@@ -63,6 +63,12 @@ interface InventoryDao {
     @Query("SELECT * FROM items")
     fun getAllItems(): Flow<List<Item>>
 
+    @Query("SELECT * FROM items")
+    suspend fun getAllItemsList(): List<Item>
+
+    @Query("SELECT * FROM categories")
+    suspend fun getAllCategoriesList(): List<Category>
+
     @Query("SELECT * FROM items WHERE categoryId = :categoryId")
     fun getItemsByCategory(categoryId: String): Flow<List<Item>>
 

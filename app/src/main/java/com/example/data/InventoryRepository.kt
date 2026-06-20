@@ -48,14 +48,7 @@ class InventoryRepository(private val dao: InventoryDao) {
         val cats = allCategories.first()
         val items = allItems.first()
         val txs = allTransactions.first()
-        val result = SupabaseSyncEngine.syncLocalToRemote(cats, items, txs)
-        if (result.isSuccess) {
-            for (tx in txs) {
-                if (!tx.synced) {
-                    dao.insertTransaction(tx.copy(synced = true))
-                }
-            }
-        }
+        val result = SupabaseSyncEngine.syncFullBidirectional(dao, cats, items, txs)
         return result
     }
 
